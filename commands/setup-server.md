@@ -87,6 +87,12 @@ fi
 
 ### Stage 8 — Append personal env vars and aliases to ~/.zshrc and ~/.bashrc
 
+**Before running this stage**, ask the user for the following values:
+- `HF_TOKEN` — HuggingFace User Access Token (from https://huggingface.co/settings/tokens)
+- `WANDB_API_KEY` — Weights & Biases API Key (from https://wandb.ai/settings)
+
+If the user skips either, leave the corresponding line commented out in the block.
+
 Use the marker `# === Personal Env & Aliases ===` as a guard to avoid duplicate appends. Append to **both** `~/.zshrc` and `~/.bashrc`:
 
 ```bash
@@ -161,7 +167,7 @@ done
 6. Run Stage 5 (install gpustat via uv).
 7. Run Stage 6 (install HuggingFace CLI).
 8. Run Stage 7 (append NVM env vars to ~/.zshrc). Skip if already present.
-9. Run Stage 8 (append personal env vars and aliases to ~/.zshrc and ~/.bashrc). Skip if marker already present.
+9. Run Stage 8: first ask the user for `HF_TOKEN` and `WANDB_API_KEY`, then append personal env vars and aliases to ~/.zshrc and ~/.bashrc. Skip if marker already present.
 10. Print a summary of what was installed and remind the user to restart their shell or run `exec zsh` to activate the new configuration.
 
 ## Notes:
