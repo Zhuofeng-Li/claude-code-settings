@@ -1,6 +1,0 @@
-{
-  "eval_id": 0,
-  "eval_name": "llm-finetune-with-requirements",
-  "prompt": "帮我把这个项目 dockerize。我的入口是 train.py，跑 `python train.py --model meta-llama/Llama-2-7b-hf --data /data/train.jsonl --output /output`。这里是文件内容：\n\n**train.py:**\n```python\nimport torch\nfrom transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments, Trainer\nfrom datasets import load_dataset\nimport argparse\n\ndef main():\n    parser = argparse.ArgumentParser()\n    parser.add_argument('--model', type=str, required=True)\n    parser.add_argument('--data', type=str, required=True)\n    parser.add_argument('--output', type=str, default='./output')\n    args = parser.parse_args()\n\n    model = AutoModelForCausalLM.from_pretrained(args.model, torch_dtype=torch.bfloat16, device_map='auto')\n    tokenizer = AutoTokenizer.from_pretrained(args.model)\n    dataset = load_dataset('json', data_files=args.data)\n\n    training_args = TrainingArguments(\n        output_dir=args.output,\n        num_train_epochs=3,\n        per_device_train_batch_size=4,\n        bf16=True,\n    )\n    trainer = Trainer(model=model, args=training_args, train_dataset=dataset['train'])\n    trainer.train()\n\nif __name__ == '__main__':\n    main()\n```\n\n**requirements.txt:**\n```\ntorch>=2.1\ntransformers>=4.36\ndatasets>=2.14\naccelerete>=0.24\npeft>=0.6\n```",
-  "assertions": []
-}

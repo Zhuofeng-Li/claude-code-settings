@@ -1,6 +1,0 @@
-{
-  "eval_id": 1,
-  "eval_name": "vllm-inference-server-workflow-description",
-  "prompt": "我想用 vLLM 跑一个本地推理服务，模型是 Qwen/Qwen2.5-7B-Instruct，跑起来之后会在 8000 端口提供 OpenAI 兼容的 API。我没有额外的代码文件，就是直接用 vLLM 的命令行。帮我搞一个 Dockerfile。",
-  "assertions": []
-}

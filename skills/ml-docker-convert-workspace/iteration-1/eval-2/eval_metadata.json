@@ -1,6 +1,0 @@
-{
-  "eval_id": 2,
-  "eval_name": "cpu-only-openai-eval-no-requirements",
-  "prompt": "帮我 dockerize 这个项目，没有 requirements.txt，你帮我推断一下依赖。\n\n**evaluate.py:**\n```python\nimport openai\nimport json\nfrom pathlib import Path\nfrom tqdm import tqdm\n\nclient = openai.OpenAI()\n\ndef evaluate_responses(input_file: str, output_file: str):\n    data = json.loads(Path(input_file).read_text())\n    results = []\n    for item in tqdm(data):\n        response = client.chat.completions.create(\n            model='gpt-4o',\n            messages=[{'role': 'user', 'content': item['prompt']}]\n        )\n        results.append({'prompt': item['prompt'], 'response': response.choices[0].message.content})\n    Path(output_file).write_text(json.dumps(results, indent=2, ensure_ascii=False))\n\nif __name__ == '__main__':\n    import sys\n    evaluate_responses(sys.argv[1], sys.argv[2])\n```",
-  "assertions": []
-}
