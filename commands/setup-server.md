@@ -85,6 +85,72 @@ EOF
 fi
 ```
 
+### Stage 8 — Append personal env vars and aliases to ~/.zshrc and ~/.bashrc
+
+Use the marker `# === Personal Env & Aliases ===` as a guard to avoid duplicate appends. Append to **both** `~/.zshrc` and `~/.bashrc`:
+
+```bash
+PERSONAL_BLOCK='
+# === Personal Env & Aliases ===
+
+## Env Var
+
+# HuggingFace token
+export HF_TOKEN="your_hf_token_here"
+
+# HuggingFace cache paths (uncomment and adjust for shared clusters)
+# export HF_DATASETS_CACHE="/data/.cache/huggingface/datasets"
+# export HF_HOME="/data/.cache/huggingface"
+
+# Personal home override (uncomment if needed)
+# export HOME="/data/zhuofeng"
+
+# Ray cache path (only needed if using Ray)
+# export RAY_ROOT_DIR="/data/.cache/ray"
+
+# Weights & Biases API key
+export WANDB_API_KEY="your_wandb_api_key_here"
+
+## Python
+
+alias py="python"
+alias upip="python -m uv pip install"
+alias ipy="ipython --TerminalInteractiveShell.shortcuts '"'"'{\"command\":\"IPython:auto_suggest.resume_hinting\", \"new_keys\": []}'"'"'"
+
+## Dev
+
+alias pre="pre-commit run --show-diff-on-failure --color=always --all-files"
+alias pi="python -m uv pip install .[all]"
+alias le="less"
+alias his="history"
+alias tr="tree -FLCN 2"
+alias trd="tree -FLCNd 2"
+alias wd="watch -n 0.1 du -hs"
+alias tf="tail -f"
+alias c7="chmod 777 -R"
+alias op="open ."
+alias cur="cursor"
+alias cod="code"
+alias ope="cursor ~/.zshrc"
+alias co="cursor ."
+alias nvi="nvidia-smi"
+alias gpu="watch -n 1 gpustat"
+alias tns="tmux new -s"
+alias tls="tmux ls"
+alias tat="tmux attach -t"
+alias dfh="df -h"
+'
+
+for RC in ~/.zshrc ~/.bashrc; do
+  if [ -f "$RC" ] && ! grep -q '# === Personal Env & Aliases ===' "$RC"; then
+    echo "$PERSONAL_BLOCK" >> "$RC"
+    echo "Appended personal env & aliases to $RC"
+  else
+    echo "Already present or file not found: $RC — skipping"
+  fi
+done
+```
+
 ## Steps:
 
 1. Run Stage 1 (zsh + oh-my-zsh). Use `--unattended` flag so the installer does not prompt to change the default shell interactively.
@@ -95,7 +161,8 @@ fi
 6. Run Stage 5 (install gpustat via uv).
 7. Run Stage 6 (install HuggingFace CLI).
 8. Run Stage 7 (append NVM env vars to ~/.zshrc). Skip if already present.
-9. Print a summary of what was installed and remind the user to restart their shell or run `exec zsh` to activate the new configuration.
+9. Run Stage 8 (append personal env vars and aliases to ~/.zshrc and ~/.bashrc). Skip if marker already present.
+10. Print a summary of what was installed and remind the user to restart their shell or run `exec zsh` to activate the new configuration.
 
 ## Notes:
 
