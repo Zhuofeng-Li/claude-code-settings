@@ -1,5 +1,5 @@
 ---
-name: docker-convert
+name: ml-docker-convert
 description: >
   Dockerize Python projects for LLM/ML research. Use this skill whenever the user:
   - Gives you Python files and wants to run them in Docker
