@@ -1,0 +1,81 @@
+{
+  "skill_name": "docker-convert",
+  "evals": [
+    {
+      "id": 0,
+      "prompt": "帮我把这个项目 dockerize。我的入口是 train.py，跑 `python train.py --model meta-llama/Llama-2-7b-hf --data /data/train.jsonl --output /output`。这里是文件内容：\n\n**train.py:**\n```python\nimport torch\nfrom transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments, Trainer\nfrom datasets import load_dataset\nimport argparse\n\ndef main():\n    parser = argparse.ArgumentParser()\n    parser.add_argument('--model', type=str, required=True)\n    parser.add_argument('--data', type=str, required=True)\n    parser.add_argument('--output', type=str, default='./output')\n    args = parser.parse_args()\n\n    model = AutoModelForCausalLM.from_pretrained(args.model, torch_dtype=torch.bfloat16, device_map='auto')\n    tokenizer = AutoTokenizer.from_pretrained(args.model)\n    dataset = load_dataset('json', data_files=args.data)\n\n    training_args = TrainingArguments(\n        output_dir=args.output,\n        num_train_epochs=3,\n        per_device_train_batch_size=4,\n        bf16=True,\n    )\n    trainer = Trainer(model=model, args=training_args, train_dataset=dataset['train'])\n    trainer.train()\n\nif __name__ == '__main__':\n    main()\n```\n\n**requirements.txt:**\n```\ntorch>=2.1\ntransformers>=4.36\ndatasets>=2.14\naccelerete>=0.24\npeft>=0.6\n```",
+      "expected_output": "Dockerfile using pytorch/pytorch CUDA base image, proper layer ordering, HF_HOME env var, build attempt, and docker run command with --gpus all and volume mounts for data and HF cache",
+      "files": [],
+      "assertions": [
+        {
+          "id": "uses-cuda-base-image",
+          "text": "Dockerfile uses a CUDA-capable base image (pytorch/pytorch with cuda tag, or nvidia/cuda)"
+        },
+        {
+          "id": "has-pythonunbuffered",
+          "text": "Dockerfile includes ENV PYTHONUNBUFFERED=1"
+        },
+        {
+          "id": "has-hf-home",
+          "text": "Dockerfile or response includes HF_HOME environment variable"
+        },
+        {
+          "id": "docker-run-has-gpus",
+          "text": "The provided docker run command includes --gpus all"
+        },
+        {
+          "id": "docker-run-has-hf-cache-mount",
+          "text": "The docker run command includes a volume mount for HuggingFace cache (e.g., ~/.cache/huggingface)"
+        }
+      ]
+    },
+    {
+      "id": 1,
+      "prompt": "我想用 vLLM 跑一个本地推理服务，模型是 Qwen/Qwen2.5-7B-Instruct，跑起来之后会在 8000 端口提供 OpenAI 兼容的 API。我没有额外的代码文件，就是直接用 vLLM 的命令行。帮我搞一个 Dockerfile。",
+      "expected_output": "Dockerfile that sets up vLLM environment, exposes port 8000, uses appropriate CUDA base image, and provides docker run command with port mapping and GPU support",
+      "files": [],
+      "assertions": [
+        {
+          "id": "exposes-port-8000",
+          "text": "Dockerfile has EXPOSE 8000 or docker run command includes -p 8000:8000"
+        },
+        {
+          "id": "cmd-uses-vllm",
+          "text": "CMD or ENTRYPOINT uses vllm serve, python -m vllm.entrypoints, or equivalent vLLM launch command"
+        },
+        {
+          "id": "docker-run-has-gpus",
+          "text": "The provided docker run command includes --gpus all"
+        },
+        {
+          "id": "mentions-hf-token-or-model-download",
+          "text": "Response mentions HF_TOKEN or how to handle model downloading (e.g., mount cache or pass token as env var)"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "帮我 dockerize 这个项目，没有 requirements.txt，你帮我推断一下依赖。\n\n**evaluate.py:**\n```python\nimport openai\nimport json\nfrom pathlib import Path\nfrom tqdm import tqdm\n\nclient = openai.OpenAI()\n\ndef evaluate_responses(input_file: str, output_file: str):\n    data = json.loads(Path(input_file).read_text())\n    results = []\n    for item in tqdm(data):\n        response = client.chat.completions.create(\n            model='gpt-4o',\n            messages=[{'role': 'user', 'content': item['prompt']}]\n        )\n        results.append({'prompt': item['prompt'], 'response': response.choices[0].message.content})\n    Path(output_file).write_text(json.dumps(results, indent=2, ensure_ascii=False))\n\nif __name__ == '__main__':\n    import sys\n    evaluate_responses(sys.argv[1], sys.argv[2])\n```",
+      "expected_output": "Dockerfile using python:3.11-slim (no GPU needed), generated requirements.txt with openai and tqdm, OPENAI_API_KEY handled as env var, no --gpus flag",
+      "files": [],
+      "assertions": [
+        {
+          "id": "uses-slim-python-image",
+          "text": "Dockerfile uses a non-CUDA base image (e.g., python:3.x-slim or python:3.x), not a CUDA/pytorch image"
+        },
+        {
+          "id": "generates-requirements-with-openai-tqdm",
+          "text": "A requirements.txt is generated containing openai and tqdm"
+        },
+        {
+          "id": "mentions-openai-api-key",
+          "text": "Response mentions OPENAI_API_KEY should be passed as an environment variable"
+        },
+        {
+          "id": "no-gpu-flag",
+          "text": "The docker run command does NOT include --gpus (correctly identified as CPU-only workload)"
+        }
+      ]
+    }
+  ]
+}
