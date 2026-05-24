@@ -115,6 +115,7 @@ The script must:
 - Build the image if it doesn't exist (or if `--build` flag is passed)
 - Load `.env` if it exists
 - Mount all relevant volumes
+- Handle HuggingFace token automatically (see HF_TOKEN section below)
 - Be immediately runnable: `./run.sh`
 
 **Template:**
@@ -148,14 +149,29 @@ if [[ -f .env ]]; then
   echo "[run.sh] Loading environment from .env"
 fi
 
+# ── HuggingFace token ──────────────────────────────────────────────────────────
+# Priority: HF_TOKEN env var > ~/.cache/huggingface/token (from huggingface-cli login)
+HF_TOKEN_ARGS=()
+if [[ -n "${HF_TOKEN:-}" ]]; then
+  HF_TOKEN_ARGS=(-e HF_TOKEN="${HF_TOKEN}")
+  echo "[run.sh] HF_TOKEN passed via environment variable"
+elif [[ -f "${HOME}/.cache/huggingface/token" ]]; then
+  HF_TOKEN_ARGS=(-v "${HOME}/.cache/huggingface:/root/.cache/huggingface:ro")
+  echo "[run.sh] HuggingFace token found at ~/.cache/huggingface/token — mounting read-only"
+else
+  echo "[run.sh] WARNING: No HuggingFace token found."
+  echo "         If your model/dataset requires authentication, set HF_TOKEN or run:"
+  echo "         huggingface-cli login"
+fi
+
 # ── Run ────────────────────────────────────────────────────────────────────────
 echo "[run.sh] Starting $CONTAINER_NAME ..."
 docker run --rm \
   --name "$CONTAINER_NAME" \
   $GPU_FLAG \
   $ENV_FLAG \
+  "${HF_TOKEN_ARGS[@]}" \
   -v "$(pwd)/data:/app/data" \
-  -v "$HOME/.cache/huggingface:/root/.cache/huggingface" \
   "$IMAGE"
 ```
 
@@ -172,6 +188,23 @@ chmod +x run.sh
 ```
 
 Tell the user: "Run `./run.sh` to build (if needed) and start the container. Pass `--build` to force a rebuild."
+
+### HF_TOKEN Best Practices
+
+**Always handle HF_TOKEN in `run.sh`** for any project that downloads from HuggingFace (models, datasets). Two supported methods:
+
+1. **Environment variable (recommended for CI/compute nodes):**
+   ```bash
+   export HF_TOKEN=hf_xxx
+   ./run.sh
+   ```
+
+2. **Mounted token file (for local dev — no copy-paste needed):**  
+   If the user has run `huggingface-cli login` on their machine, the token is at `~/.cache/huggingface/token`. Mount it read-only so the container picks it up automatically.
+
+**Never bake the token into the image** — it would be committed to the image layer and leak if the image is pushed.
+
+**Always warn loudly if no token is found** — a missing token causes silent download failures (403 errors) that are hard to debug inside a container.
 
 ---
 
