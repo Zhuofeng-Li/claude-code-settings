@@ -189,22 +189,69 @@ chmod +x run.sh
 
 Tell the user: "Run `./run.sh` to build (if needed) and start the container. Pass `--build` to force a rebuild."
 
-### HF_TOKEN Best Practices
+### Secrets Best Practices (HF_TOKEN, WANDB_API_KEY, etc.)
 
-**Always handle HF_TOKEN in `run.sh`** for any project that downloads from HuggingFace (models, datasets). Two supported methods:
+**Never bake secrets into the image** — they get committed to image layers and leak if the image is pushed.
 
-1. **Environment variable (recommended for CI/compute nodes):**
-   ```bash
-   export HF_TOKEN=hf_xxx
-   ./run.sh
-   ```
+**Always scan for secrets in Step 1.** Common ones in ML projects:
 
-2. **Mounted token file (for local dev — no copy-paste needed):**  
-   If the user has run `huggingface-cli login` on their machine, the token is at `~/.cache/huggingface/token`. Mount it read-only so the container picks it up automatically.
+| Secret | When needed |
+|--------|------------|
+| `HF_TOKEN` | Gated models/datasets on HuggingFace |
+| `WANDB_API_KEY` | Weights & Biases experiment tracking |
+| `OPENAI_API_KEY` | OpenAI API calls |
+| `ANTHROPIC_API_KEY` | Anthropic API calls |
 
-**Never bake the token into the image** — it would be committed to the image layer and leak if the image is pushed.
+**For each secret found, add to `run.sh`:**
 
-**Always warn loudly if no token is found** — a missing token causes silent download failures (403 errors) that are hard to debug inside a container.
+```bash
+# ── Secrets ────────────────────────────────────────────────────────────────────
+# HuggingFace: priority env var > ~/.cache/huggingface/token (huggingface-cli login)
+HF_TOKEN_ARGS=()
+if [[ -n "${HF_TOKEN:-}" ]]; then
+  HF_TOKEN_ARGS=(-e HF_TOKEN="${HF_TOKEN}")
+  echo "[run.sh] HF_TOKEN passed via environment variable"
+elif [[ -f "${HOME}/.cache/huggingface/token" ]]; then
+  HF_TOKEN_ARGS=(-v "${HOME}/.cache/huggingface:/root/.cache/huggingface:ro")
+  echo "[run.sh] Mounting ~/.cache/huggingface (read-only)"
+else
+  echo "[run.sh] WARNING: No HuggingFace token found. Gated models/datasets will fail."
+  echo "         Fix: export HF_TOKEN=hf_xxx  OR  huggingface-cli login"
+fi
+
+# Weights & Biases
+WANDB_ARGS=()
+if [[ -n "${WANDB_API_KEY:-}" ]]; then
+  WANDB_ARGS=(-e WANDB_API_KEY="${WANDB_API_KEY}")
+  echo "[run.sh] WANDB_API_KEY passed via environment variable"
+elif [[ -f "${HOME}/.netrc" ]] && grep -q "wandb.ai" "${HOME}/.netrc" 2>/dev/null; then
+  WANDB_ARGS=(-v "${HOME}/.netrc:/root/.netrc:ro")
+  echo "[run.sh] Mounting ~/.netrc for wandb credentials"
+else
+  echo "[run.sh] WARNING: No WANDB_API_KEY found. wandb logging will be disabled."
+  echo "         Fix: export WANDB_API_KEY=xxx  OR  wandb login"
+  WANDB_ARGS=(-e WANDB_MODE=disabled)
+fi
+```
+
+Then pass them to `docker run`:
+```bash
+docker run --rm \
+  ...
+  "${HF_TOKEN_ARGS[@]}" \
+  "${WANDB_ARGS[@]}" \
+  ...
+```
+
+**Always warn loudly if a secret is missing** — silent failures (403 errors, wandb offline mode) are hard to debug inside a container.
+
+**Generate `.env.example` listing all secrets** so the user knows exactly what to fill in:
+```
+# Copy to .env and fill in values
+HF_TOKEN=           # HuggingFace token (for gated models/datasets)
+WANDB_API_KEY=      # Weights & Biases API key (or leave blank to disable logging)
+OPENAI_API_KEY=     # OpenAI API key (if used)
+```
 
 ---
 
