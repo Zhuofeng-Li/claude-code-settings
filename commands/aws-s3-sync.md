@@ -1,11 +1,6 @@
-# S3 Sync to/from Amazon Internal Buckets
+# S3 Sync to Amazon Internal Buckets
 
-Refresh AWS credentials via ADA and sync between local and S3 (shopqa or rufus bucket).
-
-## Buckets
-
-- `shopqa`: `s3://shopqa-users/zhuofeng/`
-- `rufus`: `s3://rufus-post-training-users-272436634516-us-west-2-an/zhuofeng/`
+Refresh AWS credentials via ADA and sync a local folder to S3 (shopqa or rufus bucket).
 
 ## Steps
 
@@ -14,33 +9,25 @@ Refresh AWS credentials via ADA and sync between local and S3 (shopqa or rufus b
 ada credentials update --provider=conduit --account=684288478426 --role=RufusScienceConduitRole --profile=default --once
 ```
 
-2. **Ask the user** for the direction:
-   - Upload (local → S3)
-   - Download (S3 → local)
+2. **Ask the user** which bucket to sync to:
+   - `shopqa`: `s3://shopqa-users/zhuofeng/`
+   - `rufus`: `s3://rufus-post-training-users-272436634516-us-west-2-an/zhuofeng/`
+   - Or both
 
-3. **Ask the user** for the local path and which bucket/path on S3.
+3. **Ask the user** for the local folder path (e.g. `./algorithmic/qwen3_solutions`). Use `$PWD` if they say "current directory".
 
 4. **Run the sync**:
-
-Upload (local → S3):
 ```bash
 aws s3 cp --recursive <LOCAL_FOLDER> <S3_BUCKET_PATH>
 ```
 
-Download (S3 → local):
-```bash
-aws s3 cp --recursive <S3_BUCKET_PATH> <LOCAL_FOLDER>
-```
+Replace `<LOCAL_FOLDER>` and `<S3_BUCKET_PATH>` with the actual values.
 
-S3 path first = download, local path first = upload.
+If syncing to **both** buckets, run both commands sequentially.
 
-For a single file, omit `--recursive`.
-
-If syncing to **both** buckets (upload only), run both commands sequentially.
-
-5. After each transfer, run `aws s3 ls <S3_BUCKET_PATH>` to confirm.
+5. After each upload, run `aws s3 ls <S3_BUCKET_PATH>` to confirm the files landed.
 
 ## Notes
 - Always refresh credentials first — conduit tokens expire quickly.
 - If `ada` is not found, remind the user to run it themselves with `! ada credentials update ...` in the prompt.
-- To preview what would be synced without transferring: `aws s3 cp --recursive --dryrun <SRC> <DST>`.
+- Use `--recursive` for directories; for a single file use `aws s3 cp <file> <s3-path>` without `--recursive`.
