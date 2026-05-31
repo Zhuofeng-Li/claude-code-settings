@@ -23,6 +23,14 @@ This document contains critical information about working with this codebase. Fo
 ## File Generation Rules
 
 1. When generating a standalone executable file (e.g., a Python script, shell script, or any file meant to be run directly), you MUST include the common invocation command(s) at the top of the file, in a comment or docstring. For example, a Python script should show the typical `uv run python script.py <args>` usage in its module docstring.
+2. For shell scripts that require environment variables, the Usage block MUST show a complete invocation example with all required env vars inlined, e.g.:
+   ```
+   # Usage:
+   #   MASTER_ADDR=10.0.0.1 \
+   #   HOSTFILE=/path/to/hostfile \
+   #   WANDB_KEY=<key> \
+   #   bash scripts/foo.sh
+   ```
 
 ## Skill Self-Improvement
 
