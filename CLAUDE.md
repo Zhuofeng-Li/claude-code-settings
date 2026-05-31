@@ -32,6 +32,11 @@ This document contains critical information about working with this codebase. Fo
    #   bash scripts/foo.sh
    ```
 
+## AGENTS.md Convention
+
+1. Before running any script, check if there is an `AGENTS.md` in the same directory as the script. If it exists, read it first and follow all rules in it.
+2. This is especially mandatory for anything under `scripts/frontier_cs/` — always read `scripts/frontier_cs/AGENTS.md` before running, modifying, or creating any FrontierCS-related script or command.
+
 ## Skill Self-Improvement
 
 1. When executing a skill (custom command under `~/.claude/commands/`), if you discover a better approach, best practice, bug fix, or any improvement during the process, you MUST update the corresponding skill file to incorporate the improvement before finishing the task. Always keep skills evolving and up-to-date.
