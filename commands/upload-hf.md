@@ -42,13 +42,14 @@ api.upload_large_folder(
 print('Upload complete!')
 ```
 
-5. **Write a README.md** into the model folder before uploading **if the user requests it or if no README.md exists**. Ask the user for:
-   - Model description / what it is
-   - Base model
-   - Training data source
-   - Training framework and config (hyperparams, hardware, duration)
-   
-   Use the template in the **README Template** section below.
+5. **MANDATORY: Write README.md BEFORE uploading.** Never skip this step. A model without a README is not acceptable. Gather the following information from the conversation context or ask the user:
+   - Base model (HF repo ID)
+   - Dataset (HF dataset ID + description)
+   - Training framework and hyperparameters (lr, wd, epochs, batch size, seq len, optimizer, scheduler, warmup, grad clip, SP size)
+   - Hardware (GPU type, num nodes, GPUs/node, total GPUs, approx training time)
+   - Eval results if available (benchmark scores)
+
+   Write the README.md into the model folder using the template below, then upload the folder (README will be included automatically). If the folder is already uploaded without a README, upload the README separately via `api.upload_file()`.
 
 6. **Run the upload** in the background with nohup and log to a file:
 
@@ -161,3 +162,5 @@ tokenizer = AutoTokenizer.from_pretrained("<repo_id>")
 - `upload_large_folder` with `num_workers=16` gives best parallel throughput for large models
 - HF commit rate limit: 128 commits/hour — for large file counts, batching is handled automatically by `upload_large_folder`
 - The token is read from `$HF_TOKEN` env var set in `~/.zshrc` — never hardcode it in scripts
+- **Always verify the HF username before uploading**: run `api.whoami()['name']` — the username may differ from what you expect (e.g. `ZhuofengLi` not `Zhuofeng-Li`). Using the wrong namespace causes a 403 error even with a valid token.
+- **On K8s nodes, `HF_XET_HIGH_PERFORMANCE=1` can achieve ~194MB/s** for large safetensors files — a 16GB model uploads in ~1.5 minutes, not hours.
