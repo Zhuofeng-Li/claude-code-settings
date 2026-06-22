@@ -48,13 +48,14 @@ kubectl get pods -n application-nonprod | grep <cluster-name>
 
 对 Stage 1 发现的**每一个** pod，依次执行 Stage 2a ~ 2c。
 
-#### Stage 2a: 安装 Docker
+#### Stage 2a: 安装 Docker + Docker Compose，并验证可运行
 
 ```bash
 kubectl exec <pod-name> -n application-nonprod -- bash -c "
-  if command -v docker &>/dev/null; then
-    echo '[<pod-name>] Docker already installed: '$(docker --version)
-  else
+  set -e
+
+  # ── 1. 安装 Docker（如未安装）──────────────────────────────────────
+  if ! command -v docker &>/dev/null; then
     echo '[<pod-name>] === Installing Docker ==='
     apt-get update -qq
     apt-get install -y -qq ca-certificates curl gnupg lsb-release
@@ -63,13 +64,58 @@ kubectl exec <pod-name> -n application-nonprod -- bash -c "
     chmod a+r /etc/apt/keyrings/docker.gpg
     echo \"deb [arch=\$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \$(. /etc/os-release && echo \"\$VERSION_CODENAME\") stable\" | tee /etc/apt/sources.list.d/docker.list > /dev/null
     apt-get update -qq
+    # docker-compose-plugin 提供 'docker compose'（v2 子命令）
     apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-    service docker start || dockerd &>/var/log/dockerd.log &
+    echo '[<pod-name>] Docker packages installed'
+  else
+    echo '[<pod-name>] Docker binary already present: '$(docker --version)
+  fi
+
+  # ── 2. 确保 dockerd 正在运行 ────────────────────────────────────────
+  # 优先用 service；失败则手动后台启动
+  start_docker() {
+    service docker start 2>/dev/null || true
     sleep 2
-    docker --version && echo '[<pod-name>] Docker installed successfully'
+    if ! docker info &>/dev/null; then
+      echo '[<pod-name>] service start failed, launching dockerd manually...'
+      # k8s pod 内宿主层通常是 overlay，不支持内核 overlay2 嵌套，
+      # 显式指定 vfs + 关闭 containerd-snapshotter 避免 daemon 崩溃。
+      nohup dockerd --storage-driver=vfs --feature containerd-snapshotter=false \
+        > /var/log/dockerd.log 2>&1 &
+      sleep 5
+    fi
+  }
+
+  if docker info &>/dev/null; then
+    echo '[<pod-name>] dockerd already running'
+  else
+    start_docker
+  fi
+
+  # ── 3. 验证 Docker 可正常执行容器 ───────────────────────────────────
+  if docker info &>/dev/null; then
+    STORAGE=\$(docker info --format '{{.Driver}}' 2>/dev/null)
+    echo '[<pod-name>] dockerd OK — storage driver: '\$STORAGE
+    # 快速冒烟测试（不拉镜像，只检查 daemon 响应）
+    docker ps -q &>/dev/null && echo '[<pod-name>] docker ps OK'
+  else
+    echo '[<pod-name>] ERROR: dockerd failed to start. Check /var/log/dockerd.log' >&2
+    tail -20 /var/log/dockerd.log 2>/dev/null >&2
+    exit 1
+  fi
+
+  # ── 4. 验证 Docker Compose v2 可用 ──────────────────────────────────
+  if docker compose version &>/dev/null; then
+    echo '[<pod-name>] Docker Compose: '$(docker compose version)
+  else
+    echo '[<pod-name>] WARNING: docker compose not available. Trying to install docker-compose-plugin...'
+    apt-get install -y -qq docker-compose-plugin
+    docker compose version && echo '[<pod-name>] Docker Compose installed successfully'
   fi
 "
 ```
+
+> **关于 vfs vs overlay2**：k8s pod 的宿主挂载本身是 overlay，内核通常不允许再嵌套 overlay2（会报 `invalid argument`）。此处显式使用 `vfs` 是正确选择。若未来宿主支持 fuse-overlayfs 或 `--privileged` 模式已开启 nested overlay，可改为 `overlay2`，但需先停止 daemon 并迁移 `/var/lib/docker`。
 
 #### Stage 2b: 安装 OpenAI Codex CLI
 
