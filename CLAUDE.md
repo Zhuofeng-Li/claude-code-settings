@@ -2,6 +2,10 @@
 
 This document contains critical information about working with this codebase. Follow these guidelines precisely.
 
+## Language Rules
+
+1. Always respond in Chinese (Simplified). Never use Korean or any other language unless the user explicitly writes in that language.
+
 ## Core Development Rules
 
 1. Package Management
