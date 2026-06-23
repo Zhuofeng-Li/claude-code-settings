@@ -186,7 +186,7 @@ kubectl exec <pod> -n application-nonprod -- bash -c "
   echo '=== [<pod>] Summary ==='
   echo -n 'Docker:   '; docker --version 2>/dev/null || echo 'NOT FOUND'
   echo -n 'Compose:  '; docker compose version 2>/dev/null || echo 'NOT FOUND'
-  echo -n 'sshd:     '; (ps aux | grep -q '[s]shd.*2222' && echo 'running on 2222') || echo 'NOT RUNNING'
+  echo -n 'sshd:     '; (lsof -i :2222 2>/dev/null | grep -q LISTEN && echo 'listening on 2222') || echo 'NOT LISTENING'
   echo -n 'ms-swift: '; python3 -c 'import swift; print(swift.__version__)' 2>/dev/null || echo 'NOT INSTALLED'
 "
 ```
@@ -255,3 +255,5 @@ done
 - port-forward 需保持终端窗口不关闭（或用 `&` 后台 + 记录 PID）
 - 若 pod 镜像不含 openssh-server 且 apt 装不上，提示联系集群管理员
 - Docker 在容器内需 dockerd 以 vfs 启动；若失败联系集群管理员开 `--privileged`
+- **端口监听检测必须用 `lsof -i :2222`，不要用 `ss`/`netstat`**：这类容器环境 netlink 常受限，`ss -tln` 会假阴性（明明 sshd 在监听却显示 NO）。`lsof` 才能可靠看到 `TCP *:2222 (LISTEN)`
+- **sshd 已运行的检测**：旧 `ps aux | grep '[s]shd.*2222'` 会因进程 cmdline 格式差异误判。改用 `lsof -i :2222 | grep -q LISTEN` 判断是否已监听，再决定是否启动；若 sshd 进程在但未监听（bind 失败 `Address already in use`），其实是已有正常 sshd 占用该端口，无需重启
