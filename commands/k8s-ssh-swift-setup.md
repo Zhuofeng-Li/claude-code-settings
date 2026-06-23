@@ -1,5 +1,5 @@
 ---
-description: Set up SSH access to every worker of a K8s cluster (non-conflicting local ports) and install Docker, Docker Compose v2, and ms-swift on all nodes. Requires cluster name and SSH public key from user.
+description: Set up SSH access to every worker of a K8s cluster (non-conflicting local ports) and install Docker, Docker Compose v2, OpenAI Codex CLI, and ms-swift on all nodes. Requires cluster name and SSH public key from user.
 allowed-tools: Bash, Edit, Write, Read, AskUserQuestion
 ---
 
@@ -8,7 +8,8 @@ allowed-tools: Bash, Edit, Write, Read, AskUserQuestion
 给指定 K8s 集群的**每一个 worker 节点**：
 1. 配置 SSH 公钥并启动 sshd（每个 worker 用**不重复**的本地 port-forward 端口）
 2. 安装 Docker + Docker Compose v2
-3. 安装 ms-swift（`pip install 'ms-swift[all]' -U`）
+3. 安装 OpenAI Codex CLI（`curl -fsSL https://chatgpt.com/codex/install.sh | sh`）
+4. 安装 ms-swift（`pip install 'ms-swift[all]' -U`）
 
 ## Usage
 
@@ -152,7 +153,25 @@ kubectl exec <pod> -n application-nonprod -- bash -c "
 
 > **vfs vs overlay2**：k8s pod 宿主挂载本身是 overlay，内核通常不允许嵌套 overlay2（报 `invalid argument`），故用 `vfs`。
 
-### Stage 5: 对每个 worker 后台安装 ms-swift
+### Stage 5: 对每个 worker 安装 OpenAI Codex CLI
+
+```bash
+kubectl exec <pod> -n application-nonprod -- bash -c "
+  export PATH=\"\$HOME/.local/bin:\$PATH\"
+  if command -v codex &>/dev/null; then
+    echo '[<pod>] Codex already installed: '\$(codex --version 2>/dev/null)
+  else
+    echo '[<pod>] === Installing OpenAI Codex CLI ==='
+    curl -fsSL https://chatgpt.com/codex/install.sh | sh
+    export PATH=\"\$HOME/.local/bin:\$PATH\"
+    command -v codex && echo '[<pod>] Codex installed successfully' || echo '[<pod>] WARNING: codex not found in PATH after install'
+  fi
+"
+```
+
+> Codex 安装到 `~/.local/bin`，记得把它加进 `PATH`（`export PATH=\"\$HOME/.local/bin:\$PATH\"`）。
+
+### Stage 6: 对每个 worker 后台安装 ms-swift
 
 ms-swift 依赖多、安装慢（5-15 分钟），后台安装避免超时：
 
@@ -168,7 +187,7 @@ kubectl exec <pod> -n application-nonprod -- bash -c "
 "
 ```
 
-### Stage 6: 等待 ms-swift 完成并汇总验证
+### Stage 7: 等待 ms-swift 完成并汇总验证
 
 轮询每个 pod 直到 ms-swift 装完（仍在装则等 60s 重试）：
 
@@ -186,12 +205,13 @@ kubectl exec <pod> -n application-nonprod -- bash -c "
   echo '=== [<pod>] Summary ==='
   echo -n 'Docker:   '; docker --version 2>/dev/null || echo 'NOT FOUND'
   echo -n 'Compose:  '; docker compose version 2>/dev/null || echo 'NOT FOUND'
+  echo -n 'Codex:    '; export PATH=\"\$HOME/.local/bin:\$PATH\"; codex --version 2>/dev/null || command -v codex 2>/dev/null || echo 'NOT FOUND'
   echo -n 'sshd:     '; (lsof -i :2222 2>/dev/null | grep -q LISTEN && echo 'listening on 2222') || echo 'NOT LISTENING'
   echo -n 'ms-swift: '; python3 -c 'import swift; print(swift.__version__)' 2>/dev/null || echo 'NOT INSTALLED'
 "
 ```
 
-### Stage 7: 生成 SSH config 与连接说明
+### Stage 8: 生成 SSH config 与连接说明
 
 为每个 worker 输出 `~/.ssh/config` 片段（本地端口 = 2222 + worker编号），并主动询问用户是否写入：
 
@@ -243,8 +263,8 @@ done
 
 1. Stage 1 先枚举所有 worker pod，**不要假设只有 worker-0**
 2. 端口严格按 worker 编号分配本地端口（2222 + i），pod 内 sshd 统一 2222
-3. 对每个 pod 顺序执行 Stage 3 → 4 → 5，可对多个 pod 并行（`&` + `wait`）加速
-4. ms-swift 统一后台安装，Stage 6 统一轮询
+3. 对每个 pod 顺序执行 Stage 3 → 4 → 5 → 6，可对多个 pod 并行（`&` + `wait`）加速
+4. ms-swift 统一后台安装，Stage 7 统一轮询
 5. 某个 pod 某步失败时记录错误、继续其余 pod，最后汇报失败节点
 6. 最后必须询问用户是否把 SSH config 片段写入 `~/.ssh/config`
 
