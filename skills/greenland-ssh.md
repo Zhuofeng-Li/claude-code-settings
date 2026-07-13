@@ -18,8 +18,10 @@ Use this skill to deploy models on Greenland SDB instances and forward service p
 
 1. User provides SSH connection info (SSM tunnel local port, child node IPs)
 2. User provides the sglang serve command to run on a specific node
-3. Deploy the model on the target node (main or child)
-4. Port-forward the service back to a local port
+3. Apply tilelang fix if needed (see greenland-fix-tilelang skill)
+4. Deploy the model on the target node (main or child)
+5. Port-forward the service back to a local port
+6. Verify with curl
 
 ## Prerequisites
 
@@ -33,20 +35,30 @@ aws ssm start-session \
   --region us-west-2
 ```
 
-## SSH Connection Details
+## SSH Connection Commands
 
-- **Main node SSH**: `ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ServerAliveInterval=60 -p <local-port> greenland-user@localhost`
-- **Child node SSH (from main)**: port **2222**, NOT port 22!
-  ```bash
-  ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 2222 greenland-user@<child-ip>
-  ```
+### Main node (from local machine)
+```bash
+ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ServerAliveInterval=60 -p <local-port> greenland-user@localhost
+```
+
+### Child node (from main node) — IMPORTANT: port 2222!
+```bash
+ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 2222 greenland-user@<child-ip>
+```
+
+### One-shot command on child node (from local machine)
+```bash
+ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ServerAliveInterval=60 \
+  -p <local-port> greenland-user@localhost \
+  "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 2222 greenland-user@<child-ip> '<command>'"
+```
 
 ## Deployment Steps
 
 ### Step 1: Deploy on Main Node
 
 ```bash
-# Run sglang in background on main node
 ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ServerAliveInterval=60 \
   -p <local-port> greenland-user@localhost \
   'nohup <sglang-command> > /tmp/sglang_<model-name>.log 2>&1 &'
@@ -55,7 +67,6 @@ ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ServerAliveIn
 ### Step 2: Deploy on Child Node
 
 ```bash
-# Run sglang in background on child node
 ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ServerAliveInterval=60 \
   -p <local-port> greenland-user@localhost \
   "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 2222 greenland-user@<child-ip> \
@@ -66,13 +77,13 @@ ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ServerAliveIn
 
 Poll the log until you see "The server is fired up and ready to roll!":
 ```bash
-ssh ... greenland-user@localhost \
-  "ssh ... -p 2222 greenland-user@<child-ip> 'tail -5 /tmp/sglang_<model-name>.log'"
+ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ServerAliveInterval=60 \
+  -p <local-port> greenland-user@localhost \
+  "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 2222 greenland-user@<child-ip> \
+  'tail -5 /tmp/sglang_<model-name>.log'"
 ```
 
 ### Step 4: Port Forward
-
-There are two cases:
 
 **Case A: Service on main node → forward to local**
 ```bash
@@ -82,7 +93,7 @@ ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ServerAliveIn
 
 **Case B: Service on child node → forward to local (two-hop)**
 
-First, create a tunnel from main node to child node:
+First, forward on main node (child → main):
 ```bash
 ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ServerAliveInterval=60 \
   -p <local-port> greenland-user@localhost \
@@ -91,7 +102,7 @@ ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ServerAliveIn
   > /tmp/forward_<model-name>.log 2>&1 &'
 ```
 
-Then, forward from main node to local:
+Then, forward to local (main → local):
 ```bash
 ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ServerAliveInterval=60 \
   -p <local-port> -L 0.0.0.0:<local-target-port>:localhost:<intermediate-port> -N greenland-user@localhost &
@@ -101,9 +112,6 @@ ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ServerAliveIn
 
 ```bash
 curl -s http://localhost:<local-target-port>/v1/models
-curl -s http://localhost:<local-target-port>/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{"model": "<model-name>", "messages": [{"role": "user", "content": "Hello"}], "max_tokens": 50}'
 ```
 
 ## Discovering Worker Nodes
@@ -113,23 +121,26 @@ ssh ... greenland-user@localhost "cat container.env | tr ' ' '\n' | grep VC_WORK
 ```
 
 Key env vars:
-- `VC_WORKER_NODES_HOSTS` - Comma-separated worker hostnames
-- `VC_WORKER_NODES_NUM` - Number of workers
-- `VC_MAIN_NODE_HOSTS` - Main node hostname
+- `VC_WORKER_NODES_HOSTS` — comma-separated worker hostnames
+- `VC_WORKER_NODES_NUM` — number of workers
+- `VC_MAIN_NODE_HOSTS` — main node hostname
 
 ## Key Facts
 
 - Main node SSH tunnel port: 2222 (forwarded to local via SSM)
-- Child node SSH port: **2222** (not 22!)
+- **Child node SSH port: 2222** (NOT 22!)
 - GPU type: Typically NVIDIA H200 (143GB each), 8 per node
 - sglang is pre-installed at `/opt/sglang/`
 - Container env file: `/home/greenland-user/container.env`
-- `/shared` is Lustre filesystem mounted across all nodes
+- `/shared` is Lustre filesystem mounted across all nodes (for sharing data between nodes)
 
 ## Common Issues
 
-1. **Child node SSH Permission denied**: Must use `-p 2222`, not default port 22
-2. **LiteLLM "Missing credentials" error**: Set `OPENAI_API_KEY=EMPTY` — sglang doesn't validate the key but the openai client library requires it to be non-empty
-3. **`--moe-runner-backend marlin` fails**: tilelang compilation error on some setups, remove this flag and retry
-4. **`--mamba-scheduler-strategy` deprecated**: Use `--mamba-radix-cache-strategy` instead
-5. **`--enable-flashinfer-allreduce-fusion` deprecated**: Use `--flashinfer-allreduce-fusion-backend=auto` instead
+1. **Child node SSH "Permission denied"**: Must use `-p 2222`, not default port 22
+2. **LiteLLM "Missing credentials" error**: Set `OPENAI_API_KEY=EMPTY` — sglang doesn't validate the key but the openai client library requires it non-empty
+3. **tilelang compilation errors** (`cuda/atomic`, `nv/target`, `cccl/`): Use the `greenland-fix-tilelang` skill to install CCCL headers
+4. **"Hidden size mismatch" with DeepSeek-V4**: Use `--moe-runner-backend marlin` instead of default triton backend
+5. **CUDA graph capture hangs (GPU 0% util, log frozen)**: Model uses too much memory for graph capture. Add `--mem-fraction-static 0.8` or `--disable-cuda-graph`
+6. **Deprecated flags**:
+   - `--mamba-scheduler-strategy` → use `--mamba-radix-cache-strategy`
+   - `--enable-flashinfer-allreduce-fusion` → use `--flashinfer-allreduce-fusion-backend=auto`
